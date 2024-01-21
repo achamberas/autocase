@@ -1,20 +1,32 @@
-# Autocase POC
+# Autocase Simulation POC
 
-This POC provides smaple code to illustrate how Google Tasks and Google Big Query may be used in the Autocase application simulations.  Google Tasks is used to handle and retry simulation failures and Big Query is used to store simulation results in a database.
+Autocase has an industry leading simulation model to forecast energy consumption given a building configuration. That simulation model takes a long time to run, so one way to speed up the process is to simulate a lot of different configurations, predict their consumption, and then train an ML model on top of that data that will predict consumption in milliseconds.
 
-## Installation
+This POC proposes a framework for simulation that will allow Autocase to simulate different building configurations and predict their energy consumption.
 
-This POC uses Docker to host the application so that it may be run locally or hosted in a service like Google Cloud Run.  
+## Framework
 
-### Running Locally
-If running the application locally, make sure that Docker is installed.  Additionally, a public url must be generated for your local environment so that Google Cloud Tasks can initiate simulations.  To do this, create a free account with [ngrok](https://dashboard.ngrok.com/signup).  **An account must be created to enable callbacks to the task queue.**  Follow instructions after signup to install ngrok locally.
+High level framework diagram:
 
-Once ngrok is installed, start the service with the command:
+<img src="workflow.png" alt="workflow" width="500"/>
 
-`ngrok http 8080`
+Framework has two componenets: local environment and google cloud. [Google Cloud Tasks](https://cloud.google.com/tasks/) are  used for task scheduling/menagment and [Google Big Query](https://cloud.google.com/bigquery) is used for storing simulation results. Local environment is used trigger google cloud tasks.
 
-The output will look something like:
+Here are the steps happen in order to run simulation:
 
+* `/create_task` API endpoint gets called (this can be done through a script or an application) 
+* A task is created & scheduled Google Cloud Tasks
+* Once that task runs it hits `/run_simulation` endpoint that either randomly fails (this is done to illustrate retry ability of google cloud tasks) or it succeeds and triggers a logging task in Google Cloud Tasks. Also in case of a success, results gets logged to Google Big Query
+  * In case of failure google cloud tasks will retry the request
+* Once the the logging task is executed it hits `/log_success` endpoint that logs success in a `success.txt` file
+
+NOTE: Local environment has to be exposed to the internet so google cloud tasks can talk to it. This can be done via ngrok (see below for setup). This local environment can be swapped with a production environment.
+
+## Installation & Set Up
+
+* Install [Docker](https://www.docker.com/)
+* Sign up for [ngrok](https://dashboard.ngrok.com/signup) & install it locally. Make note of the forwarding address (i.e. `https://xxxx-xxx-xx-xx-xxx.ngrok-free.app`) as this will need to be used when running the Docker container.
+* Once installed, open up terminal and run `ngrok http 8080`. Output similar to the one below should appear:
 ```
 ngrok                                                                                                                                                                
 Introducing Pay-as-you-go pricing: https://ngrok.com/r/payg                                                                                                                                                                                                                                                        
@@ -31,25 +43,16 @@ Connections                   ttl     opn     rt1     rt5     p50     p90
                               131     0       0.00    0.00    3.01    6.67       
 ```
 
-Make note of the Forwarding address (i.e. `https://xxxx-xxx-xx-xx-xxx.ngrok-free.app`) as this will need to be used when running the Docker container.
+* Open up a new terminal window and build the docker image by running `docker build . -t autocase_poc`
+* Once that's build run the docker image with this command `docker run --name autocase_poc -p 8080:8080 --env PORT=8080 --env BACKEND_URL=<ngrok forwarding address> autocase_poc` (put the forwarding address that was noted earlier)
+* Test out that service is working by visiting `http://localhost:8080`. The page loaded should say `Hello World! The app is running.`
 
-### Build and Run Docker Image
 
-To build the Docker image run this command in root folder of the application:
-
-`docker build . -t autocase_poc`
-
-This will install all necessary libraries in the image.  After the image builds, open a new terminal window and run the container:
-
-`docker run --name autocase_poc -p 8080:8080 --env PORT=8080 --env BACKEND_URL=<ngrok forwarding address> autocase_poc`
+NOTE: This assumes that the process is running on a local machine. Once this gets to production ngrok would not be needed. Docker image can be used to install the process on any machine.
 
 ## Execution
 
-Test that the service is running by visiting `http://localhost:8080` in a browser.  You should see the message:
-
-`Hello World! The app is running.`
-
-To call the service, use `curl` (in a new terminal window) or Postman with the endpoint `http://localhost:8080/create_task` and `POST` the payload:
+* Envoke `http://localhost:8080/create_task` (either via curl or Postman) with `POST` and this payload 
 
 ```
 {
@@ -58,23 +61,21 @@ To call the service, use `curl` (in a new terminal window) or Postman with the e
 }
 ```
 
-If the tasks are generated successfully, the response will be:
+* If the tasks are generated successfully, the response will be:
 
 `tasks created to run simulation with 6 iterations`
 
-## Results
+## Review Results
 
-**NOTE:** The simulation imitates random failures to illustrate Cloud Task retry logic.
+* Open [Google Task Queue](https://console.cloud.google.com/cloudtasks/queue/us-central1/default/tasks?authuser=3&project=autocase-201317) to review tasks created for each simulation. A task for each iteration will be shown.  As the iteration completes successfully, the task will disappear from the list.  If a task fails, the number of retrys will be noted.
 
-Open the "default" [Google Task Queue](https://console.cloud.google.com/cloudtasks/queue/us-central1/default/tasks?authuser=3&project=autocase-201317) to see tasks created for each iteration of the simulation.  A task for each iteration will be shown.  As the iteration completes successfully, the task will disappear from the list.  If a task fails, the number of retrys will be noted.
+* In the terminal window running ngrok to see the successful (`200 OK`) and failed (`500 INTERNAL SERVER ERROR`) simulation iterations, as well as successfully logged results. 
 
-View the terminal window running ngrok to see the successful (`200 OK`) and failed (`500 INTERNAL SERVER ERROR`) simulation iterations, as well as successfully logged results.  
+* In the terminal window running the Docker container to see execution messages and failures.
 
-View the terminal window running the Docker container to see execution messages and failures.
+* In [Google Big Query](https://console.cloud.google.com/bigquery?authuser=3&project=autocase-201317&ws=!1m5!1m4!4m3!1sautocase-201317!2ssimulation_poc!3ssimulation) open and review `simulation_poc.simulation` 
 
-Open the table `simulation_poc.simulation` in [Google Big Query](https://console.cloud.google.com/bigquery?authuser=3&project=autocase-201317&ws=!1m5!1m4!4m3!1sautocase-201317!2ssimulation_poc!3ssimulation) and click the `PREVIEW` tab to see the simulation results.
-
-## Configure Cloud Tasks
+### Configure Cloud Tasks
 
 To modify the configuration for the default Cloud Task queue, run this command with the Google Cloud CLI installed
 
@@ -88,13 +89,7 @@ gcloud tasks queues update default \
 ```
 or modify the queue in the Google Cloud UI.
 
-## Service Workflow
-
-The diagram below illustrates the workflow of this service.
-
-<img src="workflow.png" alt="workflow" width="500"/>
-
-## Sample Code
+### Envoke Service With Python
 
 The following code can be run in a Jupyter notebook or Python CLI, in place of `curl` or Postman, to test the service.
 
