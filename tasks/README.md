@@ -1,8 +1,8 @@
 # Autocase Simulation POC
 
-Autocase has an industry leading simulation model to forecast energy consumption given a building configuration. That simulation model takes a long time to run, so one way to speed up the process is to simulate a lot of different configurations, predict their consumption, and then train an ML model on top of that data that will predict consumption in milliseconds.
+Purpose of this POC is to showcase a framework that would enable AutoCase to retry failed proccesses automatically (via Google Tasks) and log results of those retries into a database (Google Big Query).
 
-This POC proposes a framework for simulation that will allow Autocase to simulate different building configurations and predict their energy consumption.
+This is a POC and is __not meant to be put in production__.
 
 ## Framework
 
@@ -25,7 +25,7 @@ NOTE: Local environment has to be exposed to the internet so google cloud tasks 
 ## Installation & Set Up
 
 * Install [Docker](https://www.docker.com/)
-* Sign up for [ngrok](https://dashboard.ngrok.com/signup) & install it locally. Make note of the forwarding address (i.e. `https://xxxx-xxx-xx-xx-xxx.ngrok-free.app`) as this will need to be used when running the Docker container.
+* Sign up for [ngrok](https://dashboard.ngrok.com/signup) & install it locally. Make note of the forwarding address (i.e. `https://xxxx-xxx-xx-xx-xxx.ngrok-free.app`) as this will need to be used when running the Docker container. This address will change _every time_ you run ngrok so you will have to update things appropriately on every run. 
 * Once installed, open up terminal and run `ngrok http 8080`. Output similar to the one below should appear:
 ```
 ngrok                                                                                                                                                                
@@ -56,8 +56,8 @@ NOTE: This assumes that the process is running on a local machine. Once this get
 
 ```
 {
-    "wait": 0,
-    "fail_rate": 0.3
+    "wait": 0, # this paramater is used to simulate processing times. Increasing it will mean longer processing times, decreasing it will mean shorter processing times. 0 means no artificial constraint on processing times. 
+    "fail_rate": 0.3 # this paramater represents failure rate. Increasing / deacreasing the paramater will increase/decrease failure rate. 
 }
 ```
 
@@ -111,3 +111,5 @@ response = requests.request("POST", url, headers=headers, data=payload)
 
 print(response.text)
 ```
+
+6,325.00
